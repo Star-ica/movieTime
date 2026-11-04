@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MovieTime — Your Entertainment. One Onchain Subscription.</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.13.4/ethers.umd.min.js"></script>
+<style>
+:root{--bg:#0a0a11;--card:#14141f;--line:#262636;--tx:#f2f2f7;--mut:#9a9ab0;--a:#ff4d6d;--b:#ffb347;--g:linear-gradient(135deg,#ff4d6d,#ffb347)}
+*{box-sizing:border-box;margin:0}body{background:var(--bg);color:var(--tx);font:15px/1.55 system-ui,Segoe UI,Roboto,sans-serif}
+a{color:inherit;text-decoration:none}button,input,select,textarea{font:inherit;color:inherit}
+.wrap{max-width:1200px;margin:auto;padding:0 20px}
+nav{position:sticky;top:0;z-index:20;background:#0a0a11cc;backdrop-filter:blur(12px);border-bottom:1px solid var(--line)}
+nav .wrap{display:flex;align-items:center;gap:22px;height:64px}
+.logo{font-weight:800;font-size:22px;letter-spacing:-.5px}.logo b{background:var(--g);-webkit-background-clip:text;color:transparent}
+nav .links{display:flex;gap:18px;color:var(--mut);flex:1}nav .links a:hover,nav .links a.on{color:var(--tx)}
+.btn{background:var(--g);color:#1a0a10;border:0;padding:10px 20px;border-radius:999px;font-weight:700;cursor:pointer}
+.btn.ghost{background:transparent;color:var(--tx);border:1px solid var(--line)}.btn.sm{padding:6px 14px;font-size:13px}.btn:disabled{opacity:.5}
+.hero{min-height:560px;display:flex;align-items:flex-end;background:linear-gradient(0deg,var(--bg) 4%,transparent 70%),radial-gradient(circle at 75% 20%,#ff4d6d55,transparent 45%),radial-gradient(circle at 20% 10%,#6b4dff44,transparent 40%);background-size:cover;background-position:center}
+.hero .wrap{padding-bottom:60px;padding-top:120px}.hero h1{font-size:clamp(34px,6vw,64px);line-height:1.05;max-width:760px;letter-spacing:-1.5px}
+.hero p{color:var(--mut);max-width:560px;margin:16px 0 26px;font-size:17px}.hero .row{display:flex;gap:12px;flex-wrap:wrap}
+section{padding:42px 0}h2{font-size:24px;margin-bottom:18px}.sub{color:var(--mut)}
+.rail{display:grid;grid-auto-flow:column;grid-auto-columns:170px;gap:14px;overflow-x:auto;padding-bottom:10px}
+.card{cursor:pointer;position:relative}.poster{aspect-ratio:2/3;border-radius:12px;background:#1d1d2c center/cover;display:flex;align-items:flex-end;padding:10px;font-weight:700;border:1px solid var(--line);transition:.2s}
+.card:hover .poster{transform:scale(1.04);border-color:var(--a)}.card small{display:block;color:var(--mut);margin-top:6px}
+.tag{position:absolute;top:8px;left:8px;font-size:11px;font-weight:700;padding:2px 8px;border-radius:99px;background:#000a}.tag.p{background:var(--g);color:#1a0a10}
+.chips{display:flex;gap:10px;flex-wrap:wrap}.chip{padding:10px 18px;border:1px solid var(--line);border-radius:99px;background:var(--card);cursor:pointer}.chip.on,.chip:hover{border-color:var(--a)}
+.plans{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px}
+.plan{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:22px}.plan h3{font-size:18px}.plan .pr{font-size:26px;font-weight:800;margin:10px 0}.plan .pr small{display:block;font-size:13px;color:var(--mut);font-weight:400}
+.plan .acts{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}.steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px}
+.step{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:20px}.step i{font-style:normal;font-weight:800;background:var(--g);-webkit-background-clip:text;color:transparent;font-size:28px}
+details{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 18px;margin-bottom:10px}summary{cursor:pointer;font-weight:600}details p{color:var(--mut);margin-top:8px}
+footer{border-top:1px solid var(--line);padding:36px 0;color:var(--mut)}footer .wrap{display:flex;gap:30px;flex-wrap:wrap;justify-content:space-between}footer a:hover{color:var(--tx)}footer nav{all:unset}
+.panel{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:22px;margin-bottom:18px}
+.player{background:#000;border-radius:14px;overflow:hidden;position:relative}.player video{width:100%;display:block;max-height:70vh}
+.ctl{display:flex;align-items:center;gap:10px;padding:10px 14px;background:#111;flex-wrap:wrap}.ctl input[type=range]{accent-color:var(--a)}.ctl .prog{flex:1;min-width:140px}
+.ctl button,.ctl select{background:#222;border:0;border-radius:8px;padding:6px 10px;cursor:pointer}
+table{width:100%;border-collapse:collapse;font-size:13px}th,td{text-align:left;padding:8px;border-bottom:1px solid var(--line);vertical-align:top}th{color:var(--mut)}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px}label{display:block;font-size:12px;color:var(--mut);margin-bottom:3px}
+input,select,textarea{width:100%;background:#0d0d16;border:1px solid var(--line);border-radius:8px;padding:8px 10px}input[type=checkbox]{width:auto}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px}.stat{background:#0d0d16;border-radius:12px;padding:14px}.stat b{display:block;font-size:22px}
+.tabs{display:flex;gap:8px;margin:16px 0;flex-wrap:wrap}.badge{padding:3px 10px;border-radius:99px;font-size:12px;background:#222}.badge.ok{background:#12391f;color:#6df29a}.badge.no{background:#3b1620;color:#ff8da1}
+#toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#222;border:1px solid var(--line);padding:10px 18px;border-radius:99px;display:none;z-index:50;max-width:90vw}
+.warn{background:#3b2a10;border:1px solid #6b4a14;color:#ffd699;padding:10px 14px;border-radius:10px;margin:12px 0;font-size:13px}.hide{display:none!important}.empty{color:var(--mut);padding:12px 0}
+</style>
+</head>
+<body>
+<nav><div class="wrap">
+  <a class="logo" href="#" onclick="go(S.account?'home':'landing');return false">Movie<b>Time</b></a>
+  <div class="links" id="links">
+    <a href="#trending" class="L">Explore</a><a href="#plans" class="L">Plans</a><a href="#how" class="L">How it works</a><a href="#faq" class="L">FAQ</a>
+    <a class="A hide" onclick="go('home')">Home</a><a class="A hide" onclick="go('sub')">Subscription</a><a class="A hide" id="adminLink" onclick="go('admin')">Admin</a>
+  </div>
+  <span id="who" class="sub"></span>
+  <button class="btn" id="connectBtn" onclick="connect()">Connect Wallet</button>
+</div></nav>
+
+<main id="landing">
+  <header class="hero" id="heroBox"><div class="wrap">
+    <span class="badge">Built on BOT Chain</span>
+    <h1 style="margin-top:14px">Your Entertainment. One Onchain Subscription.</h1>
+    <p id="heroSub">Stream licensed movies, series and documentaries. Your subscription and payment records live on BOT Chain — transparent, portable and never auto-charged.</p>
+    <div class="row"><button class="btn" onclick="connect()">Connect Wallet</button><a class="btn ghost" href="#trending">Explore Movies</a></div>
+  </div></header>
+  <div class="wrap">
+    <div class="warn hide" id="cfgWarn">Setup needed: set <code>CONFIG.contract</code> (and <code>CONFIG.rpc</code> / <code>CONFIG.chainId</code>) at the top of this file's script after deploying MovieTime.sol.</div>
+    <section id="trending"><h2>Trending Now</h2><p class="sub hide" id="mockNote" style="margin:-8px 0 14px">Sample titles shown for preview. Real titles appear here once an admin publishes them onchain.</p><div class="rail" id="l_trend"></div></section>
+    <section><h2>Popular Categories</h2><div class="chips" id="l_cats"></div></section>
+    <section><h2>Featured</h2><div class="rail" id="l_feat"></div></section>
+    <section id="plans"><h2>Subscription Plans</h2><p class="sub" style="margin:-8px 0 16px">Pay in BOT or USDT. Connect your wallet to subscribe.</p><div class="plans" id="l_plans"></div></section>
+    <section id="how"><h2>How It Works</h2><div class="steps">
+      <div class="step"><i>01</i><h3>Connect</h3><p class="sub">Link your wallet on BOT Chain. Free titles unlock instantly.</p></div>
+      <div class="step"><i>02</i><h3>Subscribe</h3><p class="sub">Choose a plan and approve one payment in BOT or USDT.</p></div>
+      <div class="step"><i>03</i><h3>Stream</h3><p class="sub">The contract checks your expiry timestamp and releases premium video references.</p></div>
+      <div class="step"><i>04</i><h3>Renew</h3><p class="sub">Extend any time. Nothing is ever deducted without your signature.</p></div></div></section>
+    <section id="faq"><h2>FAQ</h2>
+      <details><summary>Is the video itself stored on BOT Chain?</summary><p>No. Blockchains are not suited to storing video. BOT Chain stores titles, metadata, access rules and payments; each title holds a configurable external video URL for content the publisher is licensed to distribute.</p></details>
+      <details><summary>Will I be charged automatically?</summary><p>Never. Every payment is a transaction you sign. Subscriptions simply expire at a blockchain timestamp.</p></details>
+      <details><summary>Which currencies are accepted?</summary><p>The BOT native token and USDT on BOT Chain.</p></details>
+      <details><summary>What if my subscription expires?</summary><p>Free titles stay available; premium titles lock until you renew. Renewing early extends from your current expiry.</p></details>
+    </section>
+  </div>
+</main>
+
+<main id="app" class="hide"><div class="wrap">
+  <div id="v_home">
+    <div class="panel hide" id="upsell"><b>You're on the free tier.</b> <span class="sub">Upgrade to unlock premium titles.</span> <button class="btn sm" onclick="go('sub')" style="margin-left:10px">View plans</button></div>
+    <section style="padding-top:20px"><div class="chips" id="a_cats"></div></section>
+    <section id="a_contRow" class="hide"><h2>Continue Watching</h2><div class="rail" id="a_cont"></div></section>
+    <section><h2>Featured</h2><div class="rail" id="a_feat"></div></section>
+    <section><h2 id="a_allT">All Titles</h2><div class="rail" id="a_all" style="grid-auto-flow:row;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));grid-auto-columns:auto"></div></section>
+  </div>
+
+  <div id="v_watch" class="hide" style="padding:24px 0">
+    <button class="btn ghost sm" onclick="stopPlayer();go('home')">← Back</button>
+    <h2 id="w_title" style="margin:16px 0 4px"></h2><p class="sub" id="w_meta"></p>
+    <div class="warn hide" id="w_lock">Premium title — an active subscription is required. <a style="text-decoration:underline;cursor:pointer" onclick="go('sub')">Subscribe</a></div>
+    <div class="player hide" id="w_player"><video id="vid" playsinline></video>
+      <div class="ctl"><button id="pp">▶</button><input class="prog" id="seek" type="range" min="0" max="1000" value="0">
+        <span id="tm" class="sub">0:00</span><input id="vol" type="range" min="0" max="1" step=".05" value="1" style="width:80px">
+        <select id="qual" class="hide"></select><button id="cc" class="hide">CC</button><button id="fs">⛶</button></div></div>
+    <p id="w_desc" style="margin:16px 0"></p><p class="sub" id="w_cast"></p>
+    <div id="w_eps"></div><h2 style="margin-top:28px">Related</h2><div class="rail" id="w_rel"></div>
+  </div>
+
+  <div id="v_sub" class="hide" style="padding:24px 0">
+    <h2>Your Subscription</h2>
+    <div class="panel" id="s_cur"></div><h2>Plans</h2><div class="plans" id="s_plans"></div>
+    <h2 style="margin-top:28px">Payment History</h2><div class="panel" style="overflow-x:auto" id="s_hist"></div>
+    <h2>Profile</h2><div class="panel grid2"><div><label>Display name</label><input id="p_name"></div><div><label>Avatar URL</label><input id="p_av"></div>
+      <div style="align-self:end"><button class="btn sm" onclick="saveProfile()">Save onchain</button></div></div>
+  </div>
+
+  <div id="v_admin" class="hide" style="padding:24px 0">
+    <h2>Admin Dashboard</h2><div class="stats" id="ad_stats"></div>
+    <div class="panel" style="margin-top:18px"><h3 id="ad_ft">Add / Edit Title</h3>
+      <div class="grid2" style="margin-top:12px">
+        <div><label>Edit ID (blank = new)</label><input id="f_id" type="number"></div>
+        <div><label>Type</label><select id="f_kind"><option value="1">Movie</option><option value="2">Series</option><option value="3">Season</option><option value="4">Episode</option><option value="5">Documentary</option><option value="6">Short film</option><option value="7">Trailer</option></select></div>
+        <div><label>Parent ID (season→series, episode→season)</label><input id="f_parent" type="number" value="0"></div>
+        <div><label>Season/Episode number</label><input id="f_num" type="number" value="0"></div>
+        <div><label>Title</label><input id="f_title"></div><div><label>Genre</label><input id="f_genre"></div>
+        <div><label>Year</label><input id="f_year" type="number" value="2025"></div><div><label>Runtime (min)</label><input id="f_runtime" type="number" value="90"></div>
+        <div><label>Rating (0–10)</label><input id="f_rating" type="number" step=".1" value="7"></div><div><label>Category</label><select id="f_cat"></select></div>
+        <div><label>Poster URL</label><input id="f_poster"></div><div><label>Banner URL</label><input id="f_banner"></div>
+        <div><label>Cast (comma separated)</label><input id="f_cast"></div>
+        <div><label>Video URL (licensed) — or 720p|url;1080p|url</label><input id="f_video"></div>
+        <div><label>Subtitles — lang|url.vtt</label><input id="f_sub"></div></div>
+      <label style="margin-top:10px">Description</label><textarea id="f_desc" rows="3"></textarea>
+      <p style="margin:10px 0"><label style="display:inline"><input type="checkbox" id="f_premium" checked> Premium</label> &nbsp; <label style="display:inline"><input type="checkbox" id="f_published" checked> Published</label> &nbsp; <label style="display:inline"><input type="checkbox" id="f_featured"> Featured</label></p>
+      <button class="btn" onclick="saveTitle()">Save title onchain</button> <button class="btn ghost" onclick="clearForm()">Clear</button></div>
+    <div class="panel" style="overflow-x:auto"><h3>Catalog</h3><table id="ad_titles"></table></div>
+    <div class="panel"><h3>Categories</h3><div id="ad_cats" style="margin:10px 0"></div><div style="display:flex;gap:8px"><input id="newCat" placeholder="New category"><button class="btn sm" onclick="addCat()">Add</button></div></div>
+    <div class="panel"><h3>Plans &amp; Prices</h3><p class="sub">Enter prices in whole units (BOT has 18 decimals; USDT decimals are read from the token). Price 0 disables that currency.</p><div id="ad_plans" style="margin-top:12px"></div></div>
+    <div class="panel" style="overflow-x:auto"><h3>Recent Payments</h3><div id="ad_pay"></div></div>
+  </div>
+</div></main>
+
+<footer><div class="wrap">
+  <div><div class="logo">Movie<b>Time</b></div><p>© <span id="yr"></span> MovieTime. All rights reserved. Copyright of all titles remains with their owners.</p></div>
+  <div><a href="https://botchain.ai" target="_blank" rel="noopener">https://botchain.ai</a><br><a href="https://scan.botchain.ai" target="_blank" rel="noopener">https://scan.botchain.ai</a></div>
+  <div><a href="#">About</a><br><a href="#">Terms</a><br><a href="#">Privacy</a><br><a href="MovieTime-Whitepaper.pdf" target="_blank">Documentation</a><br><a href="#">Copyright</a></div>
+</div></footer>
+<div id="toast"></div>
+
+<script>
+/* ===== CONFIG — fill after deploying MovieTime.sol ===== */
+const CONFIG={chainId:0,chainName:"BOT Chain",rpc:"",symbol:"BOT",explorer:"https://scan.botchain.ai",contract:""};
+/* ======================================================= */
+const T="tuple(uint8 kind,uint256 parentId,uint16 number,uint16 year,uint16 runtime,uint8 rating,uint256 categoryId,bool premium,bool published,bool featured,string title,string description,string poster,string banner,string genre,string cast)";
+const P="tuple(address user,uint8 planId,bool usdt,uint256 amount,uint64 start,uint64 expiry,uint64 paidAt)";
+const ABI=[`function nextId() view returns(uint256)`,`function getTitles(uint256,uint256) view returns(${T}[])`,`function getVideo(uint256) view returns(string,string)`,
+`function getCategories() view returns(string[],bool[])`,`function plans(uint256) view returns(uint64,uint256,uint256,bool)`,`function expiryOf(address) view returns(uint64)`,
+`function isActive(address) view returns(bool)`,`function isAdmin(address) view returns(bool)`,`function getPayments(address) view returns(${P}[])`,
+`function getPaymentRange(uint256,uint256) view returns(${P}[])`,`function paymentCount() view returns(uint256)`,`function subscriberCount() view returns(uint256)`,
+`function botRevenue() view returns(uint256)`,`function usdtRevenue() view returns(uint256)`,`function usdt() view returns(address)`,`function profiles(address) view returns(string,string)`,
+`function setProfile(string,string)`,`function subscribe(uint8,bool) payable`,`function addTitle(${T},string,string)`,`function editTitle(uint256,${T},string,string)`,
+`function setPublished(uint256,bool)`,`function setFeatured(uint256,bool)`,`function addCategory(string)`,`function setCategory(uint256,string,bool)`,
+`function setPlan(uint8,uint64,uint256,uint256,bool)`];
+const ERC=[`function decimals() view returns(uint8)`,`function approve(address,uint256) returns(bool)`,`function allowance(address,address) view returns(uint256)`];
+const KINDS=["","Movie","Series","Season","Episode","Documentary","Short Film","Trailer"],PN=["Weekly","Monthly","Quarterly","Yearly"];
+const S={account:null,c:null,rc:null,ud:6,titles:[],cats:[],catNames:[],plans:[],sub:{active:false,exp:0},admin:false,cat:-1,usdt:null};
+const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
+const esc=s=>String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));
+const toast=m=>{const t=$("#toast");t.textContent=m;t.style.display="block";clearTimeout(toast.h);toast.h=setTimeout(()=>t.style.display="none",5000)};
+const fmtD=x=>x?new Date(Number(x)*1000).toLocaleString():"—";
+const money=(a,u)=>u?ethers.formatUnits(a,S.ud)+" USDT":ethers.formatEther(a)+" "+CONFIG.symbol;
+const norm=(t,id)=>({id,kind:Number(t.kind),parent:Number(t.parentId),num:Number(t.number),year:Number(t.year),runtime:Number(t.runtime),rating:Number(t.rating)/10,cat:Number(t.categoryId),premium:t.premium,published:t.published,featured:t.featured,title:t.title,desc:t.description,poster:t.poster,banner:t.banner,genre:t.genre,cast:t.cast});
+
+/* ---------- Sample titles (fictional, shown on the landing page until real titles are published) ---------- */
+const gr=(a,b)=>`linear-gradient(160deg,${a},${b})`;
+const MOCK=[
+["Neon Lagos",1,2025,9.1,"Thriller",1,1,gr("#ff4d6d","#2b0a3d")],["The Last Griot",1,2024,8.8,"Drama",1,1,gr("#ffb347","#3d1a0a")],
+["Harmattan Nights",1,2025,8.4,"Romance",0,1,gr("#6b4dff","#0a0a2e")],["Orbit Runners",2,2025,8.9,"Sci-Fi",1,1,gr("#00d4ff","#0a1a3d")],
+["Ember Kingdom",2,2024,8.6,"Fantasy",1,0,gr("#ff7a18","#3d0a1a")],["Savannah Speaks",5,2024,8.2,"Documentary",0,0,gr("#7dd87d","#0a3d1a")],
+["Midnight Market",6,2025,7.9,"Comedy",0,0,gr("#ffd166","#3d2a0a")],["Cipher Street",1,2023,8.0,"Crime",1,0,gr("#9a9ab0","#12121c")],
+["Blue Horizon",5,2025,8.3,"Documentary",1,0,gr("#4dabff","#0a2a3d")],["Drumline",1,2024,7.8,"Music",0,1,gr("#ff4dd2","#2e0a3d")],
+["Echo Protocol",2,2025,8.7,"Sci-Fi",1,0,gr("#4dffb8","#0a2e3d")],["Gold Coast Heist",1,2024,8.1,"Action",1,0,gr("#ffb347","#1a0a3d")]
+].map((m,i)=>({mock:true,id:-(i+1),title:m[0],kind:m[1],year:m[2],rating:m[3],genre:m[4],premium:!!m[5],featured:!!m[6],grad:m[7],poster:"",banner:"",cat:0,published:true}));
+
+/* ---------- Data ---------- */
+async function init(){
+  $("#yr").textContent=new Date().getFullYear();
+  if(!CONFIG.contract){$("#cfgWarn").classList.remove("hide");renderAll();return}
+  if(CONFIG.rpc){S.rc=new ethers.Contract(CONFIG.contract,ABI,new ethers.JsonRpcProvider(CONFIG.rpc));await refresh()}else renderAll();
+}
+async function refresh(){
+  const c=S.c||S.rc;if(!c)return;
+  try{
+    const n=Number(await c.nextId());const res=n>1?await c.getTitles(1,Math.min(n-1,300)):[];
+    S.titles=res.map((t,i)=>norm(t,i+1));
+    const [names,act]=await c.getCategories();S.catNames=[...names];S.cats=[...act];
+    S.plans=[];for(let i=0;i<4;i++){const p=await c.plans(i);S.plans.push({duration:Number(p[0]),bot:p[1],usdt:p[2],active:p[3]})}
+    S.usdt=await c.usdt().catch(()=>null);
+    if(S.usdt&&S.usdt!==ethers.ZeroAddress&&(S.c||S.rc))try{S.ud=Number(await new ethers.Contract(S.usdt,ERC,c.runner).decimals())}catch{}
+    if(S.account){S.sub.exp=Number(await c.expiryOf(S.account));S.sub.active=await c.isActive(S.account);S.admin=await c.isAdmin(S.account)}
+  }catch(e){console.error(e);toast("Could not read contract — check CONFIG and network")}
+  renderAll();
+}
+const listed=()=>S.titles.filter(t=>t.published&&t.kind!==3&&t.kind!==4);
+const cardH=t=>`<div class="card" onclick="${t.mock?"connect()":"openTitle("+t.id+")"}"><div class="poster" style="${t.mock?`background-image:${t.grad}`:t.poster?`background-image:url('${esc(t.poster)}')`:""}">${t.poster?"":esc(t.title)}</div>
+<span class="tag ${t.premium?"p":""}">${t.premium?"PREMIUM":"FREE"}</span><small><b style="color:var(--tx)">${esc(t.title)}</b><br>${KINDS[t.kind]} · ${t.year}</small></div>`;
+const rail=(sel,arr)=>{$(sel).innerHTML=arr.length?arr.map(cardH).join(""):`<p class="empty">Nothing here yet.</p>`};
+
+/* ---------- Render ---------- */
+function renderAll(){
+  const L=listed(),feat=L.filter(t=>t.featured);
+  const LS=L.length?L:MOCK,FS=L.length?feat:MOCK.filter(t=>t.featured);
+  $("#mockNote").classList.toggle("hide",!!L.length);
+  rail("#l_trend",LS.slice().sort((a,b)=>b.rating-a.rating).slice(0,12));rail("#l_feat",FS);
+  const used=L.length?[...new Set(L.map(t=>S.catNames[t.cat]||"General"))]:[...new Set(MOCK.map(t=>t.genre))];
+  $("#l_cats").innerHTML=used.map(n=>`<span class="chip" onclick="connect()">${esc(n)}</span>`).join("");
+  const h=feat[0]||L[0];if(h&&h.banner)$("#heroBox").style.backgroundImage=`linear-gradient(0deg,var(--bg) 4%,transparent 70%),url('${h.banner}')`;
+  renderPlans("#l_plans");
+  if(!S.account)return;
+  $("#upsell").classList.toggle("hide",S.sub.active);
+  $("#a_cats").innerHTML=`<span class="chip ${S.cat<0?"on":""}" onclick="setCat(-1)">All</span>`+S.catNames.map((n,i)=>S.cats[i]?`<span class="chip ${S.cat===i?"on":""}" onclick="setCat(${i})">${esc(n)}</span>`:"").join("");
+  rail("#a_feat",feat);rail("#a_all",S.cat<0?L:L.filter(t=>t.cat===S.cat));
+  const pr=JSON.parse(localStorage.getItem("mt_prog")||"{}");
+  const cont=L.filter(t=>pr[t.id]&&pr[t.id].t>5&&pr[t.id].t<pr[t.id].d-10);
+  $("#a_contRow").classList.toggle("hide",!cont.length);rail("#a_cont",cont);
+  renderSub();if(S.admin)renderAdmin();
+}
+const setCat=i=>{S.cat=i;renderAll()};
+function planCard(i,pay){const p=S.plans[i];if(!p||!p.active)return"";
+  const usd=p.usdt>0n,bot=p.bot>0n,d=p.duration/86400;
+  return `<div class="plan"><h3>${PN[i]}</h3><span class="sub">${d} days access</span><div class="pr">${bot?ethers.formatEther(p.bot)+" "+CONFIG.symbol:"—"}<small>${usd?"or "+ethers.formatUnits(p.usdt,S.ud)+" USDT":""}</small></div>
+  <div class="acts">${pay?(bot?`<button class="btn sm" onclick="buy(${i},false)">Pay ${CONFIG.symbol}</button>`:"")+(usd?`<button class="btn sm ghost" onclick="buy(${i},true)">Pay USDT</button>`:""):`<button class="btn sm" onclick="connect()">Connect to subscribe</button>`}</div></div>`}
+function renderPlans(sel){const h=[0,1,2,3].map(i=>planCard(i,false)).join("");$(sel).innerHTML=h||`<p class="empty">Plans will appear once the administrator activates them.</p>`}
+function renderSub(){
+  $("#s_plans").innerHTML=[0,1,2,3].map(i=>planCard(i,true)).join("")||`<p class="empty">No active plans.</p>`;
+  loadHistory()}
+async function loadHistory(){
+  const c=S.c;if(!c)return;const pay=await c.getPayments(S.account);const last=pay[pay.length-1];
+  $("#s_cur").innerHTML=S.sub.active&&last?`<span class="badge ok">Active</span> <b>${PN[Number(last.planId)]}</b> · ${money(last.amount,last.usdt)}<br><span class="sub">Started ${fmtD(last.start)} · Expires ${fmtD(S.sub.exp)}</span><br><button class="btn sm" style="margin-top:10px" onclick="document.getElementById('s_plans').scrollIntoView()">Renew / extend</button>`
+   :`<span class="badge no">${S.sub.exp?"Expired":"No subscription"}</span> <span class="sub">${S.sub.exp?"Expired "+fmtD(S.sub.exp)+". ":""}Free titles remain available.</span>`;
+  $("#s_hist").innerHTML=pay.length?`<table><tr><th>Paid</th><th>Plan</th><th>Amount</th><th>Start</th><th>Expiry</th></tr>${[...pay].reverse().map(p=>`<tr><td>${fmtD(p.paidAt)}</td><td>${PN[Number(p.planId)]}</td><td>${money(p.amount,p.usdt)}</td><td>${fmtD(p.start)}</td><td>${fmtD(p.expiry)}</td></tr>`).join("")}</table>`:`<p class="empty">No payments yet.</p>`;
+  const [n,a]=await c.profiles(S.account);$("#p_name").value=n;$("#p_av").value=a;if(n)$("#who").textContent=n}
+
+/* ---------- Wallet ---------- */
+async function connect(){
+  if(!window.ethereum)return toast("Install a Web3 wallet (e.g. MetaMask) to continue");
+  if(!CONFIG.contract||!CONFIG.chainId)return toast("Set CONFIG.contract and CONFIG.chainId first");
+  try{
+    const prov=new ethers.BrowserProvider(window.ethereum);await prov.send("eth_requestAccounts",[]);
+    if(Number((await prov.getNetwork()).chainId)!==CONFIG.chainId){
+      const hex="0x"+CONFIG.chainId.toString(16);
+      try{await prov.send("wallet_switchEthereumChain",[{chainId:hex}])}
+      catch(e){if(e.code===4902||e.error?.code===4902)await prov.send("wallet_addEthereumChain",[{chainId:hex,chainName:CONFIG.chainName,rpcUrls:[CONFIG.rpc],nativeCurrency:{name:CONFIG.symbol,symbol:CONFIG.symbol,decimals:18},blockExplorerUrls:[CONFIG.explorer]}]);else throw e}
+    }
+    const p2=new ethers.BrowserProvider(window.ethereum);
+    if(Number((await p2.getNetwork()).chainId)!==CONFIG.chainId)return toast("Please switch to BOT Chain");
+    const signer=await p2.getSigner();S.account=await signer.getAddress();S.c=new ethers.Contract(CONFIG.contract,ABI,signer);
+    $("#connectBtn").textContent=S.account.slice(0,6)+"…"+S.account.slice(-4);$("#connectBtn").onclick=null;$("#who").textContent="";
+    await refresh();$$(".L").forEach(e=>e.classList.add("hide"));$$(".A").forEach(e=>e.classList.remove("hide"));
+    if(!S.admin)$("#adminLink").classList.add("hide");
+    go("home");toast(S.sub.active?"Subscription active":"Free access — upgrade to unlock premium");
+    window.ethereum.on?.("accountsChanged",()=>location.reload());window.ethereum.on?.("chainChanged",()=>location.reload());
+  }catch(e){toast(e.shortMessage||e.message)}
+}
+function go(v){
+  const app=v!=="landing";$("#landing").classList.toggle("hide",app);$("#app").classList.toggle("hide",!app);
+  ["home","watch","sub","admin"].forEach(x=>$("#v_"+x)?.classList.toggle("hide",x!==v));scrollTo(0,0);
+}
+
+/* ---------- Payments ---------- */
+async function tx(fn,label){try{toast(label+"… confirm in wallet");const r=await fn();toast("Waiting for confirmation…");await r.wait();toast("Done ✔");await refresh();return true}catch(e){toast(e.shortMessage||e.reason||e.message);return false}}
+async function buy(i,usdt){
+  const p=S.plans[i];
+  if(!usdt)return tx(()=>S.c.subscribe(i,false,{value:p.bot}),"Subscribing");
+  const tok=new ethers.Contract(S.usdt,ERC,S.c.runner);
+  if((await tok.allowance(S.account,CONFIG.contract))<p.usdt){if(!await tx(()=>tok.approve(CONFIG.contract,p.usdt),"Approving exactly this payment"))return}
+  tx(()=>S.c.subscribe(i,true),"Subscribing");
+}
+const saveProfile=()=>tx(()=>S.c.setProfile($("#p_name").value,$("#p_av").value),"Saving profile");
+
+/* ---------- Player ---------- */
+let cur=null,srcs=[],lastSave=0;
+const vid=()=>$("#vid"),fmtT=s=>{s=Math.floor(s||0);return Math.floor(s/60)+":"+String(s%60).padStart(2,"0")};
+async function openTitle(id){
+  const t=S.titles.find(x=>x.id===id);if(!t)return;
+  if(!S.account){toast("Connect your wallet to watch");return connect()}
+  cur=t;go("watch");stopPlayer();
+  $("#w_title").textContent=t.title;$("#w_meta").textContent=[KINDS[t.kind],t.year,t.runtime+" min","★ "+t.rating.toFixed(1),t.genre].join(" · ");
+  $("#w_desc").textContent=t.desc;$("#w_cast").textContent=t.cast?"Cast: "+t.cast:"";
+  const kids=S.titles.filter(x=>x.parent===t.id&&x.published).sort((a,b)=>a.num-b.num);
+  $("#w_eps").innerHTML=kids.length?`<h2 style="margin-top:20px">${t.kind===2?"Seasons":"Episodes"}</h2><div class="chips">${kids.map(k=>`<span class="chip" onclick="openTitle(${k.id})">${k.kind===3?"Season ":"Ep "}${k.num} — ${esc(k.title)}</span>`).join("")}</div>`:"";
+  rail("#w_rel",listed().filter(x=>x.id!==t.id&&(x.genre===t.genre||x.cat===t.cat)).slice(0,10));
+  $("#w_lock").classList.add("hide");$("#w_player").classList.add("hide");
+  if(t.kind===2||t.kind===3){if(!kids.length)toast("No episodes published yet");return}
+  try{
+    const [v,s]=await S.c.getVideo(id);if(!v)return toast("No video reference set for this title");
+    srcs=v.split(";").map(x=>x.includes("|")?{l:x.split("|")[0],u:x.split("|").slice(1).join("|")}:{l:"Auto",u:x}).filter(x=>x.u);
+    const el=vid();el.innerHTML="";el.src=srcs[0].u;
+    if(s){const [lang,u]=s.includes("|")?s.split("|"):["en",s];const tr=document.createElement("track");tr.kind="subtitles";tr.srclang=lang;tr.label=lang;tr.src=u;el.appendChild(tr);$("#cc").classList.remove("hide")}
+    const q=$("#qual");q.classList.toggle("hide",srcs.length<2);q.innerHTML=srcs.map((x,i)=>`<option value="${i}">${esc(x.l)}</option>`).join("");
+    const pr=JSON.parse(localStorage.getItem("mt_prog")||"{}")[id];if(pr)el.addEventListener("loadedmetadata",()=>{el.currentTime=pr.t},{once:true});
+    $("#w_player").classList.remove("hide");
+  }catch(e){const m=e.reason||e.shortMessage||"";if(/Subscription/.test(m)||/Subscription/.test(e.message))$("#w_lock").classList.remove("hide");else toast(m||e.message)}
+}
+function stopPlayer(){const v=vid();v.pause();v.removeAttribute("src");v.load();$("#pp").textContent="▶"}
+function wirePlayer(){
+  const v=vid();
+  $("#pp").onclick=()=>v.paused?v.play():v.pause();v.onclick=$("#pp").onclick;
+  v.onplay=()=>$("#pp").textContent="⏸";v.onpause=()=>$("#pp").textContent="▶";
+  v.ontimeupdate=()=>{if(v.duration)$("#seek").value=v.currentTime/v.duration*1000;$("#tm").textContent=fmtT(v.currentTime)+" / "+fmtT(v.duration);
+    if(cur&&Date.now()-lastSave>2000){lastSave=Date.now();const p=JSON.parse(localStorage.getItem("mt_prog")||"{}");p[cur.id]={t:v.currentTime,d:v.duration||0};localStorage.setItem("mt_prog",JSON.stringify(p))}};
+  $("#seek").oninput=e=>{if(v.duration)v.currentTime=e.target.value/1000*v.duration};
+  $("#vol").oninput=e=>v.volume=e.target.value;
+  $("#fs").onclick=()=>document.fullscreenElement?document.exitFullscreen():$("#w_player").requestFullscreen();
+  $("#qual").onchange=e=>{const t=v.currentTime,pl=!v.paused;v.src=srcs[e.target.value].u;v.onloadedmetadata=()=>{v.currentTime=t;if(pl)v.play()}};
+  $("#cc").onclick=()=>{const tr=v.textTracks[0];if(tr)tr.mode=tr.mode==="showing"?"hidden":"showing"};
+}
+
+/* ---------- Admin ---------- */
+const F=["id","kind","parent","num","title","genre","year","runtime","rating","cat","poster","banner","cast","video","sub","desc"];
+function renderAdmin(){
+  $("#f_cat").innerHTML=S.catNames.map((n,i)=>`<option value="${i}">${esc(n)}</option>`).join("");
+  $("#ad_titles").innerHTML=`<tr><th>ID</th><th>Title</th><th>Type</th><th>Status</th><th></th></tr>`+S.titles.map(t=>`<tr><td>${t.id}</td><td>${esc(t.title)}</td><td>${KINDS[t.kind]}</td>
+   <td><span class="badge ${t.published?"ok":"no"}">${t.published?"Published":"Draft"}</span> ${t.premium?"Premium":"Free"} ${t.featured?"★":""}</td>
+   <td><button class="btn sm ghost" onclick="editT(${t.id})">Edit</button> <button class="btn sm ghost" onclick="tx(()=>S.c.setPublished(${t.id},${!t.published}),'Updating')">${t.published?"Unpublish":"Publish"}</button> <button class="btn sm ghost" onclick="tx(()=>S.c.setFeatured(${t.id},${!t.featured}),'Updating')">${t.featured?"Unfeature":"Feature"}</button></td></tr>`).join("");
+  $("#ad_cats").innerHTML=S.catNames.map((n,i)=>`<span class="chip ${S.cats[i]?"on":""}" onclick="tx(()=>S.c.setCategory(${i},'${esc(n).replace(/'/g,"")}',${!S.cats[i]}),'Updating')">${esc(n)} ${S.cats[i]?"✓":"(hidden)"}</span>`).join(" ");
+  $("#ad_plans").innerHTML=S.plans.map((p,i)=>`<div class="grid2" style="margin-bottom:10px;align-items:end"><div><label>${PN[i]} — days</label><input id="pl_d${i}" type="number" value="${p.duration/86400}"></div>
+   <div><label>Price ${CONFIG.symbol}</label><input id="pl_b${i}" value="${ethers.formatEther(p.bot)}"></div><div><label>Price USDT</label><input id="pl_u${i}" value="${ethers.formatUnits(p.usdt,S.ud)}"></div>
+   <div><label style="display:inline"><input type="checkbox" id="pl_a${i}" ${p.active?"checked":""}> Active</label> <button class="btn sm" onclick="savePlan(${i})">Save</button></div></div>`).join("");
+  adminStats()}
+async function adminStats(){
+  const c=S.c;const [sc,br,ur,pc]=await Promise.all([c.subscriberCount(),c.botRevenue(),c.usdtRevenue(),c.paymentCount()]);
+  const act=S.titles.filter(t=>t.published).length;
+  $("#ad_stats").innerHTML=[["Subscribers",sc],["Payments",pc],[CONFIG.symbol+" revenue",ethers.formatEther(br)],["USDT revenue",ethers.formatUnits(ur,S.ud)],["Titles",S.titles.length],["Published",act]].map(([k,v])=>`<div class="stat"><span class="sub">${k}</span><b>${v}</b></div>`).join("");
+  const from=Math.max(0,Number(pc)-25),pay=await c.getPaymentRange(from,25);
+  $("#ad_pay").innerHTML=pay.length?`<table><tr><th>Paid</th><th>User</th><th>Plan</th><th>Amount</th><th>Expiry</th></tr>${[...pay].reverse().map(p=>`<tr><td>${fmtD(p.paidAt)}</td><td><a href="${CONFIG.explorer}/address/${p.user}" target="_blank">${p.user.slice(0,8)}…</a></td><td>${PN[Number(p.planId)]}</td><td>${money(p.amount,p.usdt)}</td><td>${fmtD(p.expiry)}</td></tr>`).join("")}</table>`:`<p class="empty">No payments yet.</p>`}
+function editT(id){const t=S.titles.find(x=>x.id===id);$("#f_id").value=id;
+  Object.entries({kind:t.kind,parent:t.parent,num:t.num,title:t.title,genre:t.genre,year:t.year,runtime:t.runtime,rating:t.rating,cat:t.cat,poster:t.poster,banner:t.banner,cast:t.cast,desc:t.desc}).forEach(([k,v])=>$("#f_"+k).value=v);
+  $("#f_premium").checked=t.premium;$("#f_published").checked=t.published;$("#f_featured").checked=t.featured;
+  S.c.getVideo(id).then(([v,s])=>{$("#f_video").value=v;$("#f_sub").value=s});$("#ad_ft").scrollIntoView()}
+const clearForm=()=>{F.forEach(k=>{const e=$("#f_"+k);if(e&&e.tagName!=="SELECT")e.value=""});$("#f_parent").value=0;$("#f_num").value=0}
+function saveTitle(){
+  const g=k=>$("#f_"+k).value,id=g("id");
+  const t=[+g("kind"),+g("parent")||0,+g("num")||0,+g("year")||0,+g("runtime")||0,Math.round(parseFloat(g("rating")||0)*10),+g("cat")||0,$("#f_premium").checked,$("#f_published").checked,$("#f_featured").checked,g("title"),g("desc"),g("poster"),g("banner"),g("genre"),g("cast")];
+  if(!g("title"))return toast("Title is required");
+  tx(()=>id?S.c.editTitle(id,t,g("video"),g("sub")):S.c.addTitle(t,g("video"),g("sub")),"Saving title");
+}
+const addCat=()=>{const n=$("#newCat").value.trim();if(n)tx(()=>S.c.addCategory(n),"Adding category")};
+const savePlan=i=>tx(()=>S.c.setPlan(i,Math.round(+$("#pl_d"+i).value*86400),ethers.parseEther($("#pl_b"+i).value||"0"),ethers.parseUnits($("#pl_u"+i).value||"0",S.ud),$("#pl_a"+i).checked),"Saving plan");
+
+wirePlayer();init();
+</script>
+</body>
+</html>
