@@ -63,7 +63,7 @@ input,select,textarea{width:100%;background:#0d0d16;border:1px solid var(--line)
     <div class="row"><button class="btn" onclick="connect()">Connect Wallet</button><a class="btn ghost" href="#trending">Explore Movies</a></div>
   </div></header>
   <div class="wrap">
-    <div class="warn hide" id="cfgWarn">Setup needed: set <code>CONFIG.contract</code> (and <code>CONFIG.rpc</code> / <code>CONFIG.chainId</code>) at the top of this file's script after deploying MovieTime.sol.</div>
+    <div class="warn hide" id="cfgWarn"></div>
     <section id="trending"><h2>Trending Now</h2><p class="sub hide" id="mockNote" style="margin:-8px 0 14px">Sample titles shown for preview. Real titles appear here once an admin publishes them onchain.</p><div class="rail" id="l_trend"></div></section>
     <section><h2>Popular Categories</h2><div class="chips" id="l_cats"></div></section>
     <section><h2>Featured</h2><div class="rail" id="l_feat"></div></section>
@@ -145,7 +145,7 @@ input,select,textarea{width:100%;background:#0d0d16;border:1px solid var(--line)
 
 <script>
 /* ===== CONFIG — fill after deploying MovieTime.sol ===== */
-const CONFIG={chainId:0,chainName:"BOT Chain",rpc:"",symbol:"BOT",explorer:"https://scan.botchain.ai",contract:""};
+const CONFIG={chainId:677,chainName:"BOT Chain Mainnet",rpc:"https://rpc.botchain.ai",symbol:"BOT",explorer:"https://scan.botchain.ai",contract:"0x62c9aC46f4A0D767Acd64f50e5eF9917428C0bb7"};
 /* ======================================================= */
 const T="tuple(uint8 kind,uint256 parentId,uint16 number,uint16 year,uint16 runtime,uint8 rating,uint256 categoryId,bool premium,bool published,bool featured,string title,string description,string poster,string banner,string genre,string cast)";
 const P="tuple(address user,uint8 planId,bool usdt,uint256 amount,uint64 start,uint64 expiry,uint64 paidAt)";
@@ -178,11 +178,43 @@ const MOCK=[
 ["Echo Protocol",2,2025,8.7,"Sci-Fi",1,0,gr("#4dffb8","#0a2e3d")],["Gold Coast Heist",1,2024,8.1,"Action",1,0,gr("#ffb347","#1a0a3d")]
 ].map((m,i)=>({mock:true,id:-(i+1),title:m[0],kind:m[1],year:m[2],rating:m[3],genre:m[4],premium:!!m[5],featured:!!m[6],grad:m[7],poster:"",banner:"",cat:0,published:true}));
 
+/* ---------- Chain plumbing ----------
+   Reads always go through BOT Chain's RPC (with from = your address, so msg.sender-gated views like
+   getVideo work). Writes are estimated on that RPC first (so reverts show the contract's message), then
+   handed to the wallet as a complete transaction. Every existing S.c.xxx(...) call keeps working. */
+const readProvider=new ethers.JsonRpcProvider(CONFIG.rpc,CONFIG.chainId,{staticNetwork:ethers.Network.from(CONFIG.chainId)});
+const withTimeout=(p,ms,msg)=>Promise.race([p,new Promise((_,rej)=>setTimeout(()=>rej(new Error(msg)),ms))]);
+const errText=e=>(e&&(e.shortMessage||e.reason||e.info?.error?.message||e.data?.message||e.message))||String(e);
+const cleanRevert=e=>{const m=errText(e),r=m.match(/reverted(?: with reason string)?:?\s*"?([^"\n]+)"?/i);return r?r[1].trim():m};
+async function ensureChain(){
+  const id=parseInt(await window.ethereum.request({method:"eth_chainId"}),16);if(id===CONFIG.chainId)return;
+  const hex="0x"+CONFIG.chainId.toString(16);
+  try{await window.ethereum.request({method:"wallet_switchEthereumChain",params:[{chainId:hex}]})}
+  catch(e){if(e.code===4902||e.code===-32603||/unrecognized|not been added/i.test(e.message||""))
+    await window.ethereum.request({method:"wallet_addEthereumChain",params:[{chainId:hex,chainName:CONFIG.chainName,rpcUrls:[CONFIG.rpc],nativeCurrency:{name:CONFIG.symbol,symbol:CONFIG.symbol,decimals:18},blockExplorerUrls:[CONFIG.explorer]}]});else throw e}
+}
+function walletRunner(){
+  return {
+    provider:readProvider,
+    call:tx=>readProvider.call({...tx,from:S.account}),
+    estimateGas:tx=>readProvider.estimateGas({...tx,from:S.account}),
+    resolveName:n=>readProvider.resolveName(n),
+    async sendTransaction(tx){
+      await withTimeout(ensureChain(),60000,"Approve the switch to BOT Chain in your wallet");
+      const req={from:S.account,to:tx.to,data:tx.data,value:tx.value||0n};
+      let gas;try{gas=await readProvider.estimateGas(req)}catch(e){throw new Error(cleanRevert(e))}
+      const hash=await window.ethereum.request({method:"eth_sendTransaction",params:[{from:req.from,to:req.to,data:req.data,value:ethers.toQuantity(req.value),gas:ethers.toQuantity(gas*12n/10n)}]});
+      for(let i=0;i<60;i++){const t=await readProvider.getTransaction(hash);if(t)return t;await new Promise(r=>setTimeout(r,1500))}
+      throw new Error("Transaction not seen on BOT Chain yet. Check "+CONFIG.explorer+"/tx/"+hash);
+    }
+  };
+}
+
 /* ---------- Data ---------- */
 async function init(){
   $("#yr").textContent=new Date().getFullYear();
   if(!CONFIG.contract){$("#cfgWarn").classList.remove("hide");renderAll();return}
-  if(CONFIG.rpc){S.rc=new ethers.Contract(CONFIG.contract,ABI,new ethers.JsonRpcProvider(CONFIG.rpc));await refresh()}else renderAll();
+  S.rc=new ethers.Contract(CONFIG.contract,ABI,readProvider);await refresh();
 }
 async function refresh(){
   const c=S.c||S.rc;if(!c)return;
@@ -198,7 +230,10 @@ async function refresh(){
   renderAll();
 }
 const listed=()=>S.titles.filter(t=>t.published&&t.kind!==3&&t.kind!==4);
-const cardH=t=>`<div class="card" onclick="${t.mock?"connect()":"openTitle("+t.id+")"}"><div class="poster" style="${t.mock?`background-image:${t.grad}`:t.poster?`background-image:url('${esc(t.poster)}')`:""}">${t.poster?"":esc(t.title)}</div>
+// Card image: the title's own poster, or a stable placeholder photo picked from its name
+const cssUrl=u=>{try{const x=new URL(u);return /^https?:$/.test(x.protocol)?x.href.replace(/["'()\s\\]/g,c=>"%"+c.charCodeAt(0).toString(16)):""}catch{return""}};
+const posterImg=t=>cssUrl(t.poster)||`https://picsum.photos/seed/movietime-${encodeURIComponent(String(t.title).toLowerCase().replace(/\s+/g,"-"))}/400/600`;
+const cardH=t=>`<div class="card" onclick="${t.mock?"connect()":"openTitle("+t.id+")"}"><div class="poster" style="background-image:linear-gradient(0deg,#000d 0%,#0000 55%),url(&quot;${posterImg(t)}&quot;)${t.mock?`,${t.grad}`:""}">${esc(t.title)}</div>
 <span class="tag ${t.premium?"p":""}">${t.premium?"PREMIUM":"FREE"}</span><small><b style="color:var(--tx)">${esc(t.title)}</b><br>${KINDS[t.kind]} · ${t.year}</small></div>`;
 const rail=(sel,arr)=>{$(sel).innerHTML=arr.length?arr.map(cardH).join(""):`<p class="empty">Nothing here yet.</p>`};
 
@@ -229,7 +264,7 @@ function planCard(i,pay){const p=S.plans[i];if(!p||!p.active)return"";
 function renderPlans(sel){const h=[0,1,2,3].map(i=>planCard(i,false)).join("");$(sel).innerHTML=h||`<p class="empty">Plans will appear once the administrator activates them.</p>`}
 function renderSub(){
   $("#s_plans").innerHTML=[0,1,2,3].map(i=>planCard(i,true)).join("")||`<p class="empty">No active plans.</p>`;
-  loadHistory()}
+  loadHistory().catch(e=>console.warn("history",e))}
 async function loadHistory(){
   const c=S.c;if(!c)return;const pay=await c.getPayments(S.account);const last=pay[pay.length-1];
   $("#s_cur").innerHTML=S.sub.active&&last?`<span class="badge ok">Active</span> <b>${PN[Number(last.planId)]}</b> · ${money(last.amount,last.usdt)}<br><span class="sub">Started ${fmtD(last.start)} · Expires ${fmtD(S.sub.exp)}</span><br><button class="btn sm" style="margin-top:10px" onclick="document.getElementById('s_plans').scrollIntoView()">Renew / extend</button>`
@@ -240,23 +275,22 @@ async function loadHistory(){
 /* ---------- Wallet ---------- */
 async function connect(){
   if(!window.ethereum)return toast("Install a Web3 wallet (e.g. MetaMask) to continue");
-  if(!CONFIG.contract||!CONFIG.chainId)return toast("Set CONFIG.contract and CONFIG.chainId first");
   try{
-    const prov=new ethers.BrowserProvider(window.ethereum);await prov.send("eth_requestAccounts",[]);
-    if(Number((await prov.getNetwork()).chainId)!==CONFIG.chainId){
-      const hex="0x"+CONFIG.chainId.toString(16);
-      try{await prov.send("wallet_switchEthereumChain",[{chainId:hex}])}
-      catch(e){if(e.code===4902||e.error?.code===4902)await prov.send("wallet_addEthereumChain",[{chainId:hex,chainName:CONFIG.chainName,rpcUrls:[CONFIG.rpc],nativeCurrency:{name:CONFIG.symbol,symbol:CONFIG.symbol,decimals:18},blockExplorerUrls:[CONFIG.explorer]}]);else throw e}
-    }
-    const p2=new ethers.BrowserProvider(window.ethereum);
-    if(Number((await p2.getNetwork()).chainId)!==CONFIG.chainId)return toast("Please switch to BOT Chain");
-    const signer=await p2.getSigner();S.account=await signer.getAddress();S.c=new ethers.Contract(CONFIG.contract,ABI,signer);
-    $("#connectBtn").textContent=S.account.slice(0,6)+"…"+S.account.slice(-4);$("#connectBtn").onclick=null;$("#who").textContent="";
-    await refresh();$$(".L").forEach(e=>e.classList.add("hide"));$$(".A").forEach(e=>e.classList.remove("hide"));
-    if(!S.admin)$("#adminLink").classList.add("hide");
-    go("home");toast(S.sub.active?"Subscription active":"Free access — upgrade to unlock premium");
-    window.ethereum.on?.("accountsChanged",()=>location.reload());window.ethereum.on?.("chainChanged",()=>location.reload());
-  }catch(e){toast(e.shortMessage||e.message)}
+    const accs=await withTimeout(window.ethereum.request({method:"eth_requestAccounts"}),60000,"Wallet did not respond. Open it from the toolbar and clear pending requests.");
+    if(!accs||!accs.length)return;
+    await onAccount(accs[0]);
+    toast(S.sub.active?"Subscription active":"Free access — upgrade to unlock premium");
+    // Switch network in the background so a hidden prompt can't freeze connect
+    withTimeout(ensureChain(),60000,"switch").catch(()=>toast("Switch your wallet to BOT Chain (677) before paying"));
+  }catch(e){toast(errText(e))}
+}
+async function onAccount(a){
+  S.account=ethers.getAddress(a);S.c=new ethers.Contract(CONFIG.contract,ABI,walletRunner());
+  $("#connectBtn").textContent=S.account.slice(0,6)+"…"+S.account.slice(-4);$("#connectBtn").onclick=null;$("#who").textContent="";
+  await refresh();$$(".L").forEach(e=>e.classList.add("hide"));$$(".A").forEach(e=>e.classList.remove("hide"));
+  if(!S.admin)$("#adminLink").classList.add("hide");
+  go("home");
+  if(!window._mtListen){window._mtListen=true;window.ethereum.on?.("accountsChanged",()=>location.reload())}
 }
 function go(v){
   const app=v!=="landing";$("#landing").classList.toggle("hide",app);$("#app").classList.toggle("hide",!app);
@@ -264,9 +298,12 @@ function go(v){
 }
 
 /* ---------- Payments ---------- */
-async function tx(fn,label){try{toast(label+"… confirm in wallet");const r=await fn();toast("Waiting for confirmation…");await r.wait();toast("Done ✔");await refresh();return true}catch(e){toast(e.shortMessage||e.reason||e.message);return false}}
+async function tx(fn,label){try{toast(label+"… confirm in wallet");const r=await fn();toast("Waiting for confirmation…");const rc=await r.wait(1,180000);if(!rc||rc.status!==1)throw new Error("Transaction reverted");toast("Done ✔");await refresh();return true}catch(e){toast(label+" failed: "+errText(e));return false}}
 async function buy(i,usdt){
-  const p=S.plans[i];
+  const r=await S.rc.plans(i);const p={duration:Number(r[0]),bot:r[1],usdt:r[2],active:r[3]};S.plans[i]=p;
+  if(!p.active)return toast("This plan is no longer active");
+  const price=usdt?ethers.formatUnits(p.usdt,S.ud)+" USDT":ethers.formatEther(p.bot)+" "+CONFIG.symbol;
+  if(!confirm(`Subscribe to ${PN[i]} for ${price}?`))return;
   if(!usdt)return tx(()=>S.c.subscribe(i,false,{value:p.bot}),"Subscribing");
   const tok=new ethers.Contract(S.usdt,ERC,S.c.runner);
   if((await tok.allowance(S.account,CONFIG.contract))<p.usdt){if(!await tx(()=>tok.approve(CONFIG.contract,p.usdt),"Approving exactly this payment"))return}
@@ -323,7 +360,7 @@ function renderAdmin(){
   $("#ad_plans").innerHTML=S.plans.map((p,i)=>`<div class="grid2" style="margin-bottom:10px;align-items:end"><div><label>${PN[i]} — days</label><input id="pl_d${i}" type="number" value="${p.duration/86400}"></div>
    <div><label>Price ${CONFIG.symbol}</label><input id="pl_b${i}" value="${ethers.formatEther(p.bot)}"></div><div><label>Price USDT</label><input id="pl_u${i}" value="${ethers.formatUnits(p.usdt,S.ud)}"></div>
    <div><label style="display:inline"><input type="checkbox" id="pl_a${i}" ${p.active?"checked":""}> Active</label> <button class="btn sm" onclick="savePlan(${i})">Save</button></div></div>`).join("");
-  adminStats()}
+  adminStats().catch(e=>console.warn("admin stats",e))}
 async function adminStats(){
   const c=S.c;const [sc,br,ur,pc]=await Promise.all([c.subscriberCount(),c.botRevenue(),c.usdtRevenue(),c.paymentCount()]);
   const act=S.titles.filter(t=>t.published).length;
@@ -344,7 +381,10 @@ function saveTitle(){
 const addCat=()=>{const n=$("#newCat").value.trim();if(n)tx(()=>S.c.addCategory(n),"Adding category")};
 const savePlan=i=>tx(()=>S.c.setPlan(i,Math.round(+$("#pl_d"+i).value*86400),ethers.parseEther($("#pl_b"+i).value||"0"),ethers.parseUnits($("#pl_u"+i).value||"0",S.ud),$("#pl_a"+i).checked),"Saving plan");
 
-wirePlayer();init();
+wirePlayer();init().then(async()=>{
+  if(!window.ethereum)return;
+  try{const a=await withTimeout(window.ethereum.request({method:"eth_accounts"}),5000,"");if(a&&a.length)await onAccount(a[0])}catch{}
+});
 </script>
 </body>
 </html>
